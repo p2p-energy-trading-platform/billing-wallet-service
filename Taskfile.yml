@@ -1,0 +1,22 @@
+version: '3'
+
+tasks:
+  db:up:
+    desc: "Run database migrations up"
+    cmds:
+      - go run cmd/migrate/main.go up
+
+  db:down:
+    desc: "Rollback last database migration"
+    cmds:
+      - go run cmd/migrate/main.go down
+
+  db:status:
+    desc: "Check migration status"
+    cmds:
+      - go run cmd/migrate/main.go status
+
+  db:create:
+    desc: "Create a new migration file (usage: task db:create NAME=add_wallets)"
+    cmds:
+      - goose -dir migrations create {{.NAME}} sql
