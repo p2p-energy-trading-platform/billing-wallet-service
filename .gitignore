@@ -1,0 +1,37 @@
+# Binaries and compiled files
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts and coverage profiles
+*.test
+*.out
+*.prof
+coverage.txt
+coverage.html
+
+# Environment variables and local secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDEs and Editor configurations
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Go vendor directory (uncomment if you do NOT want to commit vendor dependencies)
+# vendor/
+
+# Ignore build files
+/billing
+/migrate
+/bin/*
