@@ -1,0 +1,19 @@
+services:
+  billing-wallet-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      POSTGRES_URL: ${DOCKER_POSTGRES_URL}
+      REDIS_ADDRESS: redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - gridx-infra-network
+
+    restart: unless-stopped
