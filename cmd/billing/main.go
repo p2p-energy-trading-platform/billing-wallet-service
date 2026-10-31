@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"time"
 
@@ -17,8 +18,7 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		// Fallback to basic logger if config fails
-		os.Stderr.WriteString("Failed to load configuration: " + err.Error() + "\n")
-		os.Exit(1)
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Initialize structured logger
