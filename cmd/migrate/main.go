@@ -1,7 +1,7 @@
 package main
 
 import (
-	"billing-service/migrations"
+	"billing-wallet-service/migrations"
 	"context"
 	"database/sql"
 	"fmt"

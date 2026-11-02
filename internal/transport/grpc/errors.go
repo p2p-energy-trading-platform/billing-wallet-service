@@ -1,7 +1,7 @@
 package grpc
 
 import (
-	"billing-service/internal/domain"
+	"billing-wallet-service/internal/domain"
 	"context"
 	"errors"
 

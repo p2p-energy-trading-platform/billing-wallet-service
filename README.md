@@ -7,7 +7,7 @@ The **Billing & Wallet Service** is a Go microservice in the GridX platform resp
 # Repository Structure
 
 ```text
-billing-service/
+billing-wallet-service/
 ├── cmd/
 │   ├── billing/                  # Application entrypoint: parse config, wire dependencies, handle signals
 │   └── migrate/                  # Goose database migration utility
@@ -49,7 +49,7 @@ cd gridx-workspace
 The repository should exist at:
 
 ```text
-gridx-workspace/billing-service
+gridx-workspace/billing-wallet-service
 ```
 
 or you can clone it by running
@@ -68,7 +68,7 @@ task setup
 
 # Install Go Dependencies
 
-From the `billing-service` directory:
+From the `billing-wallet-service` directory:
 
 ```bash
 go mod download
@@ -134,10 +134,12 @@ Example:
 ```text
 migrations/
 ├── embed.go
-├── <TIMESTAMP>_initial_schema.sql
-├── <TIMESTAMP>_fee_configs.sql
+├── 00001_add_update_timestamp_function.sql
+├── 00002_create_wallets_and_holds.sql
 └── ...
 ```
+
+Files are numbered in the order they run. Create the next one with `task db:create NAME=<what_it_does>`, which picks the next number. Never rename or renumber a migration that has been applied to a shared environment, because Goose tracks applied migrations by that number.
 
 The migration SQL files are embedded into the Go executable via `migrations/embed.go`.
 
@@ -198,7 +200,7 @@ task infra-up
 ### 2. Move to Service Directory
 
 ```bash
-cd billing-service
+cd billing-wallet-service
 ```
 
 ### 3. Apply Migrations
@@ -220,7 +222,7 @@ go run ./cmd/billing
 From `gridx-workspace`:
 
 ```bash
-task build -- billing-service
+task build -- billing-wallet-service
 task up
 ```
 

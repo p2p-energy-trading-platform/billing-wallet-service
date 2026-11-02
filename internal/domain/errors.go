@@ -39,4 +39,5 @@ var (
 	ErrPriceExceedsReservation = errors.New("domain: fill price exceeds reservation price collar")
 	ErrWebhookSignatureInvalid = errors.New("domain: stripe webhook signature verification failed")
 	ErrAlreadySettled          = errors.New("domain: trade already settled")
+	ErrUnbalancedJournal       = errors.New("domain: journal lines do not sum to zero")
 )
