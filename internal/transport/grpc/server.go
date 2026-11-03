@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	billingv1 "github.com/p2p-energy-trading-platform/go-sdk/gen/gridx/billing/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -15,7 +16,7 @@ const gracefulStopTimeout = 5 * time.Second
 
 // Services holds the handlers this server registers next to the health service.
 type Services struct {
-	// add billing services here
+	Wallet billingv1.WalletServiceServer
 }
 
 type Server struct {
@@ -47,6 +48,8 @@ func New(address string, logger *slog.Logger, services Services) *Server {
 		logger = slog.Default()
 	}
 
+	billingv1.RegisterWalletServiceServer(server, services.Wallet)
+
 	return &Server{
 		address: address,
 		server:  server,
@@ -55,14 +58,20 @@ func New(address string, logger *slog.Logger, services Services) *Server {
 	}
 }
 
-func (server *Server) Run() error {
+// Listen binds the server's address, so a port conflict can fail startup before
+// the blocking Serve runs.
+func (server *Server) Listen() (net.Listener, error) {
 	listener, err := net.Listen("tcp", server.address)
 
 	if err != nil {
-		return fmt.Errorf("listen grpc: %w", err)
+		return nil, fmt.Errorf("listen grpc: %w", err)
 	}
 
-	server.logger.Info("starting gRPC server", "address", server.address)
+	return listener, nil
+}
+
+func (server *Server) Serve(listener net.Listener) error {
+	server.logger.Info("starting gRPC server", "address", listener.Addr().String())
 
 	if err := server.server.Serve(listener); err != nil {
 		return fmt.Errorf("serve grpc: %w", err)

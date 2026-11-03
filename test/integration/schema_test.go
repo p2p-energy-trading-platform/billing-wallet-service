@@ -70,9 +70,14 @@ func openDB(t *testing.T, url string) *sql.DB {
 	return db
 }
 
-// startPostgres returns a connection as the service role to a database that is
-// bootstrapped like gridx-infra but has no migrations applied.
-func startPostgres(t *testing.T) *sql.DB {
+// testPostgres is a database bootstrapped like gridx-infra with no migrations applied.
+type testPostgres struct {
+	container  testcontainers.Container
+	db         *sql.DB // connected as the service role
+	serviceURL string
+}
+
+func startPostgres(t *testing.T) *testPostgres {
 	t.Helper()
 	ctx := context.Background()
 
@@ -113,7 +118,9 @@ func startPostgres(t *testing.T) *sql.DB {
 		}
 	}
 
-	return openDB(t, fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", serviceUser, password, host, mapped.Port(), database))
+	serviceURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", serviceUser, password, host, mapped.Port(), database)
+
+	return &testPostgres{container: container, db: openDB(t, serviceURL), serviceURL: serviceURL}
 }
 
 func newProvider(t *testing.T, db *sql.DB) *goose.Provider {
@@ -132,15 +139,21 @@ func newProvider(t *testing.T, db *sql.DB) *goose.Provider {
 	return provider
 }
 
-func migratedDB(t *testing.T) *sql.DB {
+func migratedPostgres(t *testing.T) *testPostgres {
 	t.Helper()
 
-	db := startPostgres(t)
-	if _, err := newProvider(t, db).Up(context.Background()); err != nil {
+	postgres := startPostgres(t)
+	if _, err := newProvider(t, postgres.db).Up(context.Background()); err != nil {
 		t.Fatalf("migrate up: %v", err)
 	}
 
-	return db
+	return postgres
+}
+
+func migratedDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	return migratedPostgres(t).db
 }
 
 func exec(t *testing.T, db *sql.DB, query string, args ...any) {
@@ -191,7 +204,7 @@ func TestMigrationsCreateAllTablesInBillingSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tables: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tables []string
 	for rows.Next() {

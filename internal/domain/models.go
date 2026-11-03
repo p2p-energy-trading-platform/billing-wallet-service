@@ -37,6 +37,16 @@ func (w Wallet) Total() int64 {
 	return w.Available + w.Reserved
 }
 
+// EnsureActive rejects any wallet that is not ACTIVE from reserving or
+// withdrawing funds. Reading a wallet is always allowed.
+func (w Wallet) EnsureActive() error {
+	if w.Status != WalletActive {
+		return ErrWalletFrozen
+	}
+
+	return nil
+}
+
 type HoldKind string
 
 const (
