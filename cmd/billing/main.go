@@ -6,11 +6,11 @@ import (
 	"os"
 	"time"
 
-	"billing-service/internal/app"
-	"billing-service/internal/config"
-	"billing-service/internal/observability"
-	"billing-service/internal/store/postgres"
-	"billing-service/internal/store/redis"
+	"billing-wallet-service/internal/app"
+	"billing-wallet-service/internal/config"
+	"billing-wallet-service/internal/observability"
+	"billing-wallet-service/internal/store/postgres"
+	"billing-wallet-service/internal/store/redis"
 )
 
 func main() {
