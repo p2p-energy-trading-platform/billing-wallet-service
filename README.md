@@ -134,12 +134,12 @@ Example:
 ```text
 migrations/
 ├── embed.go
-├── 00001_add_update_timestamp_function.sql
-├── 00002_create_wallets_and_holds.sql
+├── 20261031125110_add_update_timestamp_function.sql
+├── 20261102090000_create_wallets_and_holds.sql
 └── ...
 ```
 
-Files are numbered in the order they run. Create the next one with `task db:create NAME=<what_it_does>`, which picks the next number. Never rename or renumber a migration that has been applied to a shared environment, because Goose tracks applied migrations by that number.
+The timestamp sets the order files run in, and the name says what each one does. Create new files with `task db:create NAME=<what_it_does>`. Timestamps are used instead of sequential numbers because two branches adding the same number merge cleanly in git and then make Goose refuse to run with a duplicate version error. Never rename a migration that has been applied to a shared environment, because Goose tracks applied migrations by that version.
 
 The migration SQL files are embedded into the Go executable via `migrations/embed.go`.
 

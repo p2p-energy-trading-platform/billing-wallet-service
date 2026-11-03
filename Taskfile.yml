@@ -17,6 +17,6 @@ tasks:
       - go run cmd/migrate/main.go status
 
   db:create:
-    desc: "Create a new migration file numbered 00001, 00002, ... (usage: task db:create NAME=add_wallets)"
+    desc: "Create a new migration file (usage: task db:create NAME=add_wallets)"
     cmds:
-      - goose -dir migrations -s create {{.NAME}} sql
+      - goose -dir migrations create {{.NAME}} sql
