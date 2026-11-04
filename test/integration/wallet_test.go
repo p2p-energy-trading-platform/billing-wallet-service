@@ -14,6 +14,7 @@ import (
 	"billing-wallet-service/internal/service"
 	"billing-wallet-service/internal/store/postgres"
 	transportgrpc "billing-wallet-service/internal/transport/grpc"
+	grpcservices "billing-wallet-service/internal/transport/grpc/services"
 
 	"github.com/google/uuid"
 	billingv1 "github.com/p2p-energy-trading-platform/go-sdk/gen/gridx/billing/v1"
@@ -39,7 +40,7 @@ func startWalletServer(t *testing.T, serviceURL string) billingv1.WalletServiceC
 
 	usecase := service.NewWalletUsecase(postgres.NewWalletRepo(pool))
 	server := transportgrpc.New("127.0.0.1:0", logger, transportgrpc.Services{
-		Wallet: transportgrpc.NewWalletHandler(usecase, logger),
+		Wallet: grpcservices.NewWalletHandler(usecase, logger),
 	})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

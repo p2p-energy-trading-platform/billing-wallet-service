@@ -14,6 +14,7 @@ import (
 	"billing-wallet-service/internal/service"
 	"billing-wallet-service/internal/store/postgres"
 	transportgrpc "billing-wallet-service/internal/transport/grpc"
+	grpcservices "billing-wallet-service/internal/transport/grpc/services"
 )
 
 type App struct {
@@ -28,7 +29,7 @@ type App struct {
 func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisClient *redis.Client) *App {
 	walletUsecase := service.NewWalletUsecase(postgres.NewWalletRepo(dbPool))
 	grpcServer := transportgrpc.New(cfg.GRPCAddress, logger, transportgrpc.Services{
-		Wallet: transportgrpc.NewWalletHandler(walletUsecase, logger),
+		Wallet: grpcservices.NewWalletHandler(walletUsecase, logger),
 	})
 
 	// Setup basic HTTP health check server
