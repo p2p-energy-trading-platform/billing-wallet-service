@@ -5,9 +5,32 @@ import (
 	"context"
 	"errors"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+const errorDomain = "billing.gridx"
+
+// domainErrors maps domain errors to the gRPC codes and typed reasons in the API
+// contract. Reasons are what callers should branch on.
+var domainErrors = []struct {
+	target error
+	code   codes.Code
+	reason string
+}{
+	{domain.ErrValidation, codes.InvalidArgument, "VALIDATION_FAILED"},
+	{domain.ErrMarketOrderNeedsCollar, codes.InvalidArgument, "MARKET_ORDER_NEEDS_COLLAR"},
+	{domain.ErrInsufficientFunds, codes.FailedPrecondition, "INSUFFICIENT_FUNDS"},
+	{domain.ErrWalletFrozen, codes.FailedPrecondition, "WALLET_FROZEN"},
+	{domain.ErrHoldInsufficient, codes.FailedPrecondition, "HOLD_INSUFFICIENT_REMAINING"},
+	{domain.ErrPriceExceedsReservation, codes.FailedPrecondition, "PRICE_EXCEEDS_RESERVATION"},
+	{domain.ErrNotFound, codes.NotFound, "NOT_FOUND"},
+	{domain.ErrHoldNotFound, codes.NotFound, "HOLD_NOT_FOUND"},
+	{domain.ErrIdempotencyConflict, codes.AlreadyExists, "IDEMPOTENCY_CONFLICT"},
+	{domain.ErrAlreadySettled, codes.AlreadyExists, "ALREADY_SETTLED"},
+	{domain.ErrWebhookSignatureInvalid, codes.InvalidArgument, "WEBHOOK_SIGNATURE_INVALID"},
+}
 
 func ToGRPCError(err error) error {
 	if err == nil {
@@ -27,54 +50,27 @@ func ToGRPCError(err error) error {
 		return status.Error(codes.DeadlineExceeded, "deadline exceeded")
 	}
 
-	// Validation and arguments
-	if errors.Is(err, domain.ErrValidation) {
-		return status.Error(codes.InvalidArgument, err.Error())
+	for _, mapping := range domainErrors {
+		if errors.Is(err, mapping.target) {
+			return statusWithReason(mapping.code, mapping.reason, err.Error())
+		}
 	}
 
-	if errors.Is(err, domain.ErrMarketOrderNeedsCollar) {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	// Precondition failures
-	if errors.Is(err, domain.ErrInsufficientFunds) {
-		return status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	if errors.Is(err, domain.ErrWalletFrozen) {
-		return status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	if errors.Is(err, domain.ErrHoldInsufficient) {
-		return status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	if errors.Is(err, domain.ErrPriceExceedsReservation) {
-		return status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	// Not found errors
-	if errors.Is(err, domain.ErrNotFound) {
-		return status.Error(codes.NotFound, err.Error())
-	}
-
-	if errors.Is(err, domain.ErrHoldNotFound) {
-		return status.Error(codes.NotFound, err.Error())
-	}
-
-	// Conflicts errors
-	if errors.Is(err, domain.ErrIdempotencyConflict) {
-		return status.Error(codes.AlreadyExists, err.Error())
-	}
-
-	if errors.Is(err, domain.ErrAlreadySettled) {
-		return status.Error(codes.AlreadyExists, err.Error())
-	}
-
-	// Security and webhooks
-	if errors.Is(err, domain.ErrWebhookSignatureInvalid) {
-		return status.Error(codes.InvalidArgument, err.Error())
+	// Infrastructure failures use fixed messages so their details never reach callers.
+	if errors.Is(err, domain.ErrUnavailable) {
+		return status.Error(codes.Unavailable, "service temporarily unavailable")
 	}
 
 	return status.Error(codes.Internal, "Internal Server Error")
+}
+
+func statusWithReason(code codes.Code, reason, message string) error {
+	st := status.New(code, message)
+
+	withInfo, err := st.WithDetails(&errdetails.ErrorInfo{Reason: reason, Domain: errorDomain})
+	if err != nil {
+		return st.Err()
+	}
+
+	return withInfo.Err()
 }

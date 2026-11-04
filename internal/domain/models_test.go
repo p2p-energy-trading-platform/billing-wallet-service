@@ -123,3 +123,24 @@ func TestValidateBalanced(t *testing.T) {
 		})
 	}
 }
+
+func TestWalletEnsureActive(t *testing.T) {
+	tests := []struct {
+		status  WalletStatus
+		wantErr error
+	}{
+		{status: WalletActive},
+		{status: WalletFrozen, wantErr: ErrWalletFrozen},
+		{status: WalletClosed, wantErr: ErrWalletFrozen},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.status), func(t *testing.T) {
+			err := Wallet{Status: tt.status}.EnsureActive()
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("EnsureActive() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}

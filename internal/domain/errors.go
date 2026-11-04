@@ -41,3 +41,7 @@ var (
 	ErrAlreadySettled          = errors.New("domain: trade already settled")
 	ErrUnbalancedJournal       = errors.New("domain: journal lines do not sum to zero")
 )
+
+// ErrUnavailable marks an infrastructure failure that is worth retrying, such as
+// the database being down. Callers retry with backoff.
+var ErrUnavailable = errors.New("domain: dependency unavailable")

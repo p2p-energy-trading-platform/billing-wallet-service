@@ -2,8 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log/slog"
-	"net"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,6 +11,10 @@ import (
 	"google.golang.org/grpc"
 
 	"billing-wallet-service/internal/config"
+	"billing-wallet-service/internal/service"
+	"billing-wallet-service/internal/store/postgres"
+	transportgrpc "billing-wallet-service/internal/transport/grpc"
+	grpcservices "billing-wallet-service/internal/transport/grpc/services"
 )
 
 type App struct {
@@ -18,12 +22,15 @@ type App struct {
 	logger       *slog.Logger
 	dbPool       *pgxpool.Pool
 	redisClient  *redis.Client
-	grpcServer   *grpc.Server
+	grpcServer   *transportgrpc.Server
 	healthServer *http.Server
 }
 
 func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisClient *redis.Client) *App {
-	grpcServer := grpc.NewServer()
+	walletUsecase := service.NewWalletUsecase(postgres.NewWalletRepo(dbPool))
+	grpcServer := transportgrpc.New(cfg.GRPCAddress, logger, transportgrpc.Services{
+		Wallet: grpcservices.NewWalletHandler(walletUsecase, logger),
+	})
 
 	// Setup basic HTTP health check server
 	mux := http.NewServeMux()
@@ -49,17 +56,17 @@ func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisCli
 
 func (a *App) Start(ctx context.Context) error {
 	// Start gRPC listener
-	grpcLis, err := net.Listen("tcp", a.cfg.GRPCAddress)
+	grpcLis, err := a.grpcServer.Listen()
 	if err != nil {
 		return err
 	}
 
 	go func() {
-		a.logger.Info("Starting gRPC server", "addr", a.cfg.GRPCAddress)
-		if err := a.grpcServer.Serve(grpcLis); err != nil && err != grpc.ErrServerStopped {
+		if err := a.grpcServer.Serve(grpcLis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			a.logger.Error("gRPC server stopped with error", "error", err)
 		}
 	}()
+	a.grpcServer.SetReady(true)
 
 	// Start Health Check server
 	go func() {
@@ -76,7 +83,8 @@ func (a *App) Stop(ctx context.Context) {
 	a.logger.Info("Shutting down application servers...")
 
 	// Graceful stop for gRPC
-	a.grpcServer.GracefulStop()
+	a.grpcServer.SetReady(false)
+	a.grpcServer.Stop()
 
 	// Shutdown health check server
 	if err := a.healthServer.Shutdown(ctx); err != nil {

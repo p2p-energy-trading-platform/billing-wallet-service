@@ -103,6 +103,8 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
+github.com/p2p-energy-trading-platform/go-sdk v1.18.0 h1:3FIPu1MNm6E8pUwFhzSKtTM8qmqgWWcJspzYjXVZLFE=
+github.com/p2p-energy-trading-platform/go-sdk v1.18.0/go.mod h1:SPJOv0vWP2oF41W0oJtbDUPQ+kbMB0Y/bRQhK+Ln5ZY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
@@ -187,6 +189,7 @@ golang.org/x/time v0.0.0-20220210224613-90d013bbcef8/go.mod h1:tRJNPiyCQ0inRvYxb
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 gonum.org/v1/gonum v0.17.0 h1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=
 gonum.org/v1/gonum v0.17.0/go.mod h1:El3tOrEuMpv2UdMrbNlKEh9vd86bmQ6vqIcDwxEOc1E=
+google.golang.org/genproto v0.0.0-20261005182115-fad411399dd8 h1:19ViM1+Odqvg4xpcB+8U1fTpy23WB3sMMyR3LSsJUpI=
 google.golang.org/genproto/googleapis/api v0.0.0-20261005182115-fad411399dd8 h1:cFbkNigDInw+wVTXc+CyhUsoHGJCw0BR6mlNoRVfre0=
 google.golang.org/genproto/googleapis/api v0.0.0-20261005182115-fad411399dd8/go.mod h1:QK6p7IgD7IZEZJBhhSUCib5X2vMOzlrGCGUw2XyVDh0=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 h1:0SXBqli5dnuCKMjI/X3FM226zEaEa0GUcSCJtN1vL2o=
