@@ -29,7 +29,8 @@ func UnaryServerLogger(logger *slog.Logger) grpc.UnaryServerInterceptor {
 
 		if code != codes.OK {
 			switch code {
-			case codes.InvalidArgument, codes.NotFound, codes.AlreadyExists, codes.Unauthenticated, codes.PermissionDenied:
+			case codes.InvalidArgument, codes.NotFound, codes.AlreadyExists, codes.Unauthenticated, codes.PermissionDenied,
+				codes.FailedPrecondition, codes.Aborted:
 				// Client-side errors
 				logFn = logger.Warn
 				msg = "gRPC client error"

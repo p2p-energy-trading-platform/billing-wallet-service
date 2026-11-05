@@ -10,21 +10,34 @@ import (
 // failure as permanent.
 var ErrValidation = errors.New("domain: validation failed")
 
+// ErrBadAmount narrows ErrValidation to a non-positive or overflowing quantity,
+// price or amount, so those failures can report the BAD_AMOUNT reason.
+var ErrBadAmount = errors.New("domain: bad amount")
+
 type ValidationError struct {
-	Field  string
-	Reason string
+	Field     string
+	Reason    string
+	badAmount bool
 }
 
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation: field %q: %s", e.Field, e.Reason)
 }
 
-func (e *ValidationError) Unwrap() error {
-	return ErrValidation
+func (e *ValidationError) Unwrap() []error {
+	if e.badAmount {
+		return []error{ErrValidation, ErrBadAmount}
+	}
+
+	return []error{ErrValidation}
 }
 
 func NewValidationError(field, reason string) error {
 	return &ValidationError{Field: field, Reason: reason}
+}
+
+func NewBadAmountError(field, reason string) error {
+	return &ValidationError{Field: field, Reason: reason, badAmount: true}
 }
 
 // Sentinel errors mapped to financial domain rules and gRPC status codes
@@ -45,3 +58,7 @@ var (
 // ErrUnavailable marks an infrastructure failure that is worth retrying, such as
 // the database being down. Callers retry with backoff.
 var ErrUnavailable = errors.New("domain: dependency unavailable")
+
+// ErrRetryableContention marks a serialization failure or deadlock. Nothing was
+// committed, so the caller can safely retry.
+var ErrRetryableContention = errors.New("domain: transaction contention, retry")

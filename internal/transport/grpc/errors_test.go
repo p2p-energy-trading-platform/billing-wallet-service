@@ -41,7 +41,9 @@ func TestToGRPCErrorMapsDomainErrors(t *testing.T) {
 		{err: domain.ErrWebhookSignatureInvalid, wantCode: codes.InvalidArgument, wantReason: "WEBHOOK_SIGNATURE_INVALID"},
 		{err: domain.ErrNotFound, wantCode: codes.NotFound, wantReason: "NOT_FOUND"},
 		{err: domain.ErrAlreadySettled, wantCode: codes.AlreadyExists, wantReason: "ALREADY_SETTLED"},
-		{err: domain.NewValidationError("qty_wh", "must be positive"), wantCode: codes.InvalidArgument, wantReason: "VALIDATION_FAILED"},
+		{err: domain.NewValidationError("order_id", "must be a UUID"), wantCode: codes.InvalidArgument, wantReason: "VALIDATION_FAILED"},
+		{err: domain.NewBadAmountError("qty_wh", "must be positive"), wantCode: codes.InvalidArgument, wantReason: "BAD_AMOUNT"},
+		{err: domain.ErrRetryableContention, wantCode: codes.Aborted, wantReason: "RETRYABLE_CONTENTION"},
 	}
 
 	for _, tt := range tests {

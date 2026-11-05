@@ -25,9 +25,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// startWalletServer runs the real gRPC server and store against the database and
-// returns a client that talks to it over a real connection.
-func startWalletServer(t *testing.T, serviceURL string) billingv1.WalletServiceClient {
+// startServer runs the real gRPC server and store against the database and returns
+// a connection to it over real networking.
+func startServer(t *testing.T, serviceURL string) *grpc.ClientConn {
 	t.Helper()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -38,9 +38,9 @@ func startWalletServer(t *testing.T, serviceURL string) billingv1.WalletServiceC
 	}
 	t.Cleanup(pool.Close)
 
-	usecase := service.NewWalletUsecase(postgres.NewWalletRepo(pool))
 	server := transportgrpc.New("127.0.0.1:0", logger, transportgrpc.Services{
-		Wallet: grpcservices.NewWalletHandler(usecase, logger),
+		Wallet: grpcservices.NewWalletHandler(service.NewWalletUsecase(postgres.NewWalletRepo(pool)), logger),
+		Order:  grpcservices.NewOrderHandler(service.NewReservationUsecase(postgres.NewReservationRepo(pool)), logger),
 	})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -56,7 +56,13 @@ func startWalletServer(t *testing.T, serviceURL string) billingv1.WalletServiceC
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	return billingv1.NewWalletServiceClient(conn)
+	return conn
+}
+
+func startWalletServer(t *testing.T, serviceURL string) billingv1.WalletServiceClient {
+	t.Helper()
+
+	return billingv1.NewWalletServiceClient(startServer(t, serviceURL))
 }
 
 func asUser(userID uuid.UUID) context.Context {

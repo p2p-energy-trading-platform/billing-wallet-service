@@ -13,14 +13,26 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// mapError marks failures worth retrying as domain.ErrUnavailable. Every other
-// error, including constraint violations, is returned unchanged.
+// mapError marks failures worth retrying as domain.ErrRetryableContention or
+// domain.ErrUnavailable. Every other error, including constraint violations, is
+// returned unchanged.
 func mapError(err error) error {
+	if isContention(err) {
+		return fmt.Errorf("%w: %w", domain.ErrRetryableContention, err)
+	}
+
 	if isUnavailable(err) {
 		return fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
 	}
 
 	return err
+}
+
+// isContention matches serialization failures (40001) and deadlocks (40P01).
+func isContention(err error) bool {
+	var pgErr *pgconn.PgError
+
+	return errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01")
 }
 
 func isUnavailable(err error) bool {

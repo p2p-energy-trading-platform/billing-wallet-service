@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"billing-wallet-service/internal/domain"
-	grpctransport "billing-wallet-service/internal/transport/grpc"
 
 	"github.com/google/uuid"
 	billingv1 "github.com/p2p-energy-trading-platform/go-sdk/gen/gridx/billing/v1"
@@ -40,23 +39,10 @@ func (h *WalletHandler) GetWallet(ctx context.Context, _ *billingv1.GetWalletReq
 
 	wallet, err := h.usecase.GetWallet(ctx, userID)
 	if err != nil {
-		return nil, h.toStatus(err)
+		return nil, toStatus(h.logger, err)
 	}
 
 	return &billingv1.GetWalletResponse{Wallet: walletToProto(wallet)}, nil
-}
-
-// toStatus logs the cause of infrastructure failures, because the status returned
-// to the caller deliberately leaves it out.
-func (h *WalletHandler) toStatus(err error) error {
-	converted := grpctransport.ToGRPCError(err)
-
-	switch status.Code(converted) {
-	case codes.Internal, codes.Unavailable:
-		h.logger.Error("wallet request failed", "error", err)
-	}
-
-	return converted
 }
 
 func callerUserID(ctx context.Context) (uuid.UUID, error) {
