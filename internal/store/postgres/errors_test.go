@@ -13,6 +13,21 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+func TestMapErrorMarksContentionAsRetryable(t *testing.T) {
+	for _, code := range []string{"40001", "40P01"} {
+		err := &pgconn.PgError{Code: code}
+
+		got := mapError(err)
+
+		if !errors.Is(got, domain.ErrRetryableContention) {
+			t.Errorf("code %s: %v is not ErrRetryableContention", code, got)
+		}
+		if errors.Is(got, domain.ErrUnavailable) {
+			t.Errorf("code %s must not be reported as unavailable", code)
+		}
+	}
+}
+
 func TestMapError(t *testing.T) {
 	tests := []struct {
 		name            string

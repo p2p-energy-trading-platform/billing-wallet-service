@@ -32,9 +32,7 @@ func (r *WalletRepo) FindWalletByUserID(ctx context.Context, userID uuid.UUID) (
 	return wallet, nil
 }
 
-// CreateWallet inserts the wallet and its ledger account in one transaction, so a
-// wallet never exists without an account to post to. When a concurrent request
-// wins the insert, this waits for it to commit and returns that wallet.
+// CreateWallet returns the user's wallet, creating it if needed.
 func (r *WalletRepo) CreateWallet(ctx context.Context, userID uuid.UUID) (domain.Wallet, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -42,6 +40,22 @@ func (r *WalletRepo) CreateWallet(ctx context.Context, userID uuid.UUID) (domain
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	wallet, err := ensureWallet(ctx, tx, userID)
+	if err != nil {
+		return domain.Wallet{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Wallet{}, fmt.Errorf("commit create wallet: %w", mapError(err))
+	}
+
+	return wallet, nil
+}
+
+// ensureWallet creates the wallet and its ledger account together, so a wallet
+// never exists without an account to post to. When a concurrent transaction wins
+// the insert, this waits for it to commit and returns that wallet.
+func ensureWallet(ctx context.Context, tx pgx.Tx, userID uuid.UUID) (domain.Wallet, error) {
 	wallet, err := scanWallet(tx.QueryRow(ctx,
 		`INSERT INTO wallets (user_id) VALUES ($1)
 		 ON CONFLICT (user_id) DO NOTHING
@@ -64,10 +78,6 @@ func (r *WalletRepo) CreateWallet(ctx context.Context, userID uuid.UUID) (domain
 		domain.AccountUserWallet, wallet.ID, "wallet:"+userID.String())
 	if err != nil {
 		return domain.Wallet{}, fmt.Errorf("insert ledger account: %w", mapError(err))
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Wallet{}, fmt.Errorf("commit create wallet: %w", mapError(err))
 	}
 
 	return wallet, nil

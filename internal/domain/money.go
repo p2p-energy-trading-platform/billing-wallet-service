@@ -6,6 +6,12 @@ import (
 )
 
 const (
+	// RoundingBufferUnits is reserved on top of an order's value and fee, because
+	// rounding per fill can add up to more than rounding the order as a whole. It
+	// allows for 50 fills at 1 unit each, and the unused part is released when the
+	// order completes.
+	RoundingBufferUnits int64 = 50
+
 	// UnitsPerCredit is the number of minor units in one credit (1 credit = 1 LKR).
 	UnitsPerCredit int64 = 100
 
@@ -20,15 +26,15 @@ const (
 // A very small trade can round down to a value of 0.
 func TradeValue(qtyWh, pricePerKwh int64) (int64, error) {
 	if qtyWh <= 0 {
-		return 0, NewValidationError("qty_wh", "must be positive")
+		return 0, NewBadAmountError("qty_wh", "must be positive")
 	}
 	if pricePerKwh <= 0 {
-		return 0, NewValidationError("price_per_kwh", "must be positive")
+		return 0, NewBadAmountError("price_per_kwh", "must be positive")
 	}
 
 	value, ok := mulDivRoundHalfUp(uint64(qtyWh), uint64(pricePerKwh), whPerKwh)
 	if !ok {
-		return 0, NewValidationError("trade_value", "exceeds the maximum representable amount")
+		return 0, NewBadAmountError("trade_value", "exceeds the maximum representable amount")
 	}
 
 	return value, nil
@@ -38,18 +44,38 @@ func TradeValue(qtyWh, pricePerKwh int64) (int64, error) {
 // capped at MaxFeeBps, the result is never larger than value.
 func Fee(value int64, bps int32) (int64, error) {
 	if value < 0 {
-		return 0, NewValidationError("value", "must not be negative")
+		return 0, NewBadAmountError("value", "must not be negative")
 	}
 	if bps < 0 || bps > MaxFeeBps {
-		return 0, NewValidationError("fee_bps", "must be between 0 and 2000")
+		return 0, NewBadAmountError("fee_bps", "must be between 0 and 2000")
 	}
 
 	fee, ok := mulDivRoundHalfUp(uint64(value), uint64(bps), bpsPerWhole)
 	if !ok {
-		return 0, NewValidationError("fee", "exceeds the maximum representable amount")
+		return 0, NewBadAmountError("fee", "exceeds the maximum representable amount")
 	}
 
 	return fee, nil
+}
+
+// ReservationAmount returns what a buy order must lock: its value at the maximum
+// price, the buyer's fee on that value, and the rounding buffer.
+func ReservationAmount(qtyWh, maxPricePerKwh int64, buyerFeeBps int32) (int64, error) {
+	value, err := TradeValue(qtyWh, maxPricePerKwh)
+	if err != nil {
+		return 0, err
+	}
+
+	fee, err := Fee(value, buyerFeeBps)
+	if err != nil {
+		return 0, err
+	}
+
+	if fee > math.MaxInt64-value || RoundingBufferUnits > math.MaxInt64-value-fee {
+		return 0, NewBadAmountError("reservation", "exceeds the maximum representable amount")
+	}
+
+	return value + fee + RoundingBufferUnits, nil
 }
 
 // mulDivRoundHalfUp computes round_half_up(a * b / divisor) using a 128-bit

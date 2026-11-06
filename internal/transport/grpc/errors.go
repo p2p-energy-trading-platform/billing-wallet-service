@@ -19,6 +19,8 @@ var domainErrors = []struct {
 	code   codes.Code
 	reason string
 }{
+	// ErrBadAmount also matches ErrValidation, so it has to be checked first.
+	{domain.ErrBadAmount, codes.InvalidArgument, "BAD_AMOUNT"},
 	{domain.ErrValidation, codes.InvalidArgument, "VALIDATION_FAILED"},
 	{domain.ErrMarketOrderNeedsCollar, codes.InvalidArgument, "MARKET_ORDER_NEEDS_COLLAR"},
 	{domain.ErrInsufficientFunds, codes.FailedPrecondition, "INSUFFICIENT_FUNDS"},
@@ -30,6 +32,7 @@ var domainErrors = []struct {
 	{domain.ErrIdempotencyConflict, codes.AlreadyExists, "IDEMPOTENCY_CONFLICT"},
 	{domain.ErrAlreadySettled, codes.AlreadyExists, "ALREADY_SETTLED"},
 	{domain.ErrWebhookSignatureInvalid, codes.InvalidArgument, "WEBHOOK_SIGNATURE_INVALID"},
+	{domain.ErrRetryableContention, codes.Aborted, "RETRYABLE_CONTENTION"},
 }
 
 func ToGRPCError(err error) error {

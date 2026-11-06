@@ -105,6 +105,92 @@ func (h Hold) Remaining() int64 {
 	return h.AmountTotal - h.AmountConsumed - h.AmountReleased
 }
 
+// MatchesReservation reports whether this hold is what the request would create,
+// which makes a retried request a replay rather than a conflict. Expiry is left
+// out because it is only a safety net and has no effect on the money.
+func (h Hold) MatchesReservation(walletID uuid.UUID, request ReserveRequest) bool {
+	if h.OrderType == nil || h.QtyWh == nil || h.MaxPricePerKwh == nil {
+		return false
+	}
+
+	return h.WalletID == walletID &&
+		*h.OrderType == request.OrderType &&
+		*h.QtyWh == request.QtyWh &&
+		*h.MaxPricePerKwh == request.MaxPricePerKwh
+}
+
+// ReleaseOutcome returns what a release should give back and the status it leaves
+// the hold in. A hold that is already terminal has nothing left to give back.
+func (h Hold) ReleaseOutcome() (int64, HoldStatus) {
+	if h.Status != HoldActive {
+		return 0, h.Status
+	}
+
+	leftover := h.Remaining()
+	if leftover == 0 {
+		return 0, HoldConsumed
+	}
+
+	return leftover, HoldReleased
+}
+
+// ReserveRequest asks to lock credits for a buy order.
+type ReserveRequest struct {
+	UserID         uuid.UUID
+	OrderID        uuid.UUID
+	OrderType      OrderType
+	QtyWh          int64
+	MaxPricePerKwh int64 // limit price, or price collar for market orders
+	ExpiresAt      *time.Time
+}
+
+// Validate checks the request can be priced. Overflow is checked when sizing it.
+func (r ReserveRequest) Validate(now time.Time) error {
+	if r.OrderType != OrderTypeLimit && r.OrderType != OrderTypeMarket {
+		return NewValidationError("order_type", "must be LIMIT or MARKET")
+	}
+	if r.QtyWh <= 0 {
+		return NewBadAmountError("qty_wh", "must be positive")
+	}
+	if r.OrderType == OrderTypeMarket && r.MaxPricePerKwh == 0 {
+		return ErrMarketOrderNeedsCollar
+	}
+	if r.MaxPricePerKwh <= 0 {
+		return NewBadAmountError("max_price_per_kwh", "must be positive")
+	}
+	if r.ExpiresAt != nil && !r.ExpiresAt.After(now) {
+		return NewValidationError("expires_at", "must be in the future")
+	}
+
+	return nil
+}
+
+// Reservation is the outcome of reserving credits. AvailableAfter is the wallet's
+// current available balance.
+type Reservation struct {
+	Hold           Hold
+	AvailableAfter int64
+}
+
+// ReleaseReason says why an order's reservation is being released.
+type ReleaseReason string
+
+const (
+	ReleaseCancelled ReleaseReason = "CANCELLED"
+	ReleaseExpired   ReleaseReason = "EXPIRED"
+	ReleaseFilled    ReleaseReason = "FILLED"
+	ReleaseRejected  ReleaseReason = "REJECTED"
+)
+
+func (r ReleaseReason) Validate() error {
+	switch r {
+	case ReleaseCancelled, ReleaseExpired, ReleaseFilled, ReleaseRejected:
+		return nil
+	default:
+		return NewValidationError("reason", "must be CANCELLED, EXPIRED, FILLED or REJECTED")
+	}
+}
+
 type LedgerAccountType string
 
 const (

@@ -17,6 +17,7 @@ const gracefulStopTimeout = 5 * time.Second
 // Services holds the handlers this server registers next to the health service.
 type Services struct {
 	Wallet billingv1.WalletServiceServer
+	Order  billingv1.OrderBillingServiceServer
 }
 
 type Server struct {
@@ -49,6 +50,7 @@ func New(address string, logger *slog.Logger, services Services) *Server {
 	}
 
 	billingv1.RegisterWalletServiceServer(server, services.Wallet)
+	billingv1.RegisterOrderBillingServiceServer(server, services.Order)
 
 	return &Server{
 		address: address,

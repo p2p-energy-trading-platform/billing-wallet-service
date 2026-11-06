@@ -29,8 +29,12 @@ func (f *fakeWalletUsecase) GetWallet(_ context.Context, userID uuid.UUID) (doma
 	return f.wallet, f.err
 }
 
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 func newTestHandler(usecase WalletUsecase) *WalletHandler {
-	return NewWalletHandler(usecase, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return NewWalletHandler(usecase, discardLogger())
 }
 
 func contextWithUser(values ...string) context.Context {
