@@ -134,6 +134,31 @@ func (h Hold) ReleaseOutcome() (int64, HoldStatus) {
 	return leftover, HoldReleased
 }
 
+// IsExpired reports whether the sweeper may reclaim this hold. A hold with no
+// expiry never expires.
+func (h Hold) IsExpired(now time.Time) bool {
+	return h.Status == HoldActive && h.ExpiresAt != nil && h.ExpiresAt.Before(now)
+}
+
+// ExpireOutcome returns what expiring an active hold should give back and the
+// status it leaves the hold in. A hold with nothing left was fully filled, so it
+// is consumed rather than expired.
+func (h Hold) ExpireOutcome() (int64, HoldStatus) {
+	leftover := h.Remaining()
+	if leftover == 0 {
+		return 0, HoldConsumed
+	}
+
+	return leftover, HoldExpired
+}
+
+// HoldExpiry is the outcome of trying to expire one hold. Expired is false when the
+// hold was locked by another transaction or no longer qualifies.
+type HoldExpiry struct {
+	Expired  bool
+	Released int64
+}
+
 // ReserveRequest asks to lock credits for a buy order.
 type ReserveRequest struct {
 	UserID         uuid.UUID

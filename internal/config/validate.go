@@ -42,5 +42,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("HEALTH_ADDRESS is required")
 	}
 
+	if c.HoldSweepInterval <= 0 {
+		return fmt.Errorf("invalid HOLD_SWEEP_INTERVAL: %s (must be positive)", c.HoldSweepInterval)
+	}
+
 	return nil
 }
