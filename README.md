@@ -119,6 +119,16 @@ To guarantee financial integrity across operations:
 
 ---
 
+# Expired Holds
+
+A background sweeper releases order holds past their `expires_at`. It is a safety net for orders OMS has abandoned, not the normal way funds return, which is `ReleaseReservation`.
+
+It is off by default. Set `HOLD_SWEEPER_ENABLED=true` to turn it on and `HOLD_SWEEP_INTERVAL` (default `1m`) to change how often it runs. Each run handles up to 100 holds.
+
+OMS controls what can expire by setting `expires_at`: a hold with none is never swept. Releasing a hold whose order is still open would make that order's fills fail, so the value must outlast the order. Replicas can sweep at the same time, because each skips anything another is working on.
+
+---
+
 # Database Migrations
 
 Database migrations are managed using **Goose**.

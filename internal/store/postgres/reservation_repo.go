@@ -153,28 +153,8 @@ func (r *ReservationRepo) ReleaseHold(ctx context.Context, orderID uuid.UUID, re
 
 	leftover, nextStatus := hold.ReleaseOutcome()
 
-	hold, err = scanHold(tx.QueryRow(ctx,
-		`UPDATE holds
-		 SET amount_released = amount_released + $1, status = $2
-		 WHERE id = $3
-		 RETURNING `+holdColumns, leftover, nextStatus, hold.ID))
-	if err != nil {
-		return 0, fmt.Errorf("update hold: %w", mapError(err))
-	}
-
-	if leftover > 0 {
-		wallet, err = scanWallet(tx.QueryRow(ctx,
-			`UPDATE wallets
-			 SET available = available + $1, reserved = reserved - $1, version = version + 1
-			 WHERE id = $2
-			 RETURNING `+walletColumns, leftover, wallet.ID))
-		if err != nil {
-			return 0, fmt.Errorf("return funds: %w", mapError(err))
-		}
-
-		if err := insertBalanceChanged(ctx, tx, wallet, hold, reason); err != nil {
-			return 0, err
-		}
+	if err := returnHoldFunds(ctx, tx, wallet, hold, leftover, nextStatus, reason); err != nil {
+		return 0, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -182,6 +162,105 @@ func (r *ReservationRepo) ReleaseHold(ctx context.Context, orderID uuid.UUID, re
 	}
 
 	return leftover, nil
+}
+
+// ExpiredOrderHolds lists order holds past their expiry, oldest first. It takes no
+// locks: ExpireHold locks and rechecks each one.
+func (r *ReservationRepo) ExpiredOrderHolds(ctx context.Context, now time.Time, limit int) ([]uuid.UUID, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT ref_id FROM holds
+		 WHERE status = $1 AND kind = $2 AND expires_at < $3
+		 ORDER BY expires_at
+		 LIMIT $4`, domain.HoldActive, domain.HoldKindOrder, now, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list expired holds: %w", mapError(err))
+	}
+
+	orderIDs, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("read expired holds: %w", mapError(err))
+	}
+
+	return orderIDs, nil
+}
+
+// ExpireHold returns what is left of an expired hold to the wallet. It locks the
+// wallet before the hold, the same order as every other balance change, so it
+// cannot deadlock with them. SKIP LOCKED means a busy wallet or another replica
+// makes it report Expired false rather than wait, and a later sweep retries.
+func (r *ReservationRepo) ExpireHold(ctx context.Context, orderID uuid.UUID, now time.Time) (domain.HoldExpiry, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return domain.HoldExpiry{}, fmt.Errorf("begin expire: %w", mapError(err))
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	unlocked, err := findOrderHold(ctx, tx, orderID, "")
+	if err != nil {
+		return domain.HoldExpiry{}, err
+	}
+
+	wallet, err := scanWallet(tx.QueryRow(ctx,
+		`SELECT `+walletColumns+` FROM wallets WHERE id = $1 FOR UPDATE SKIP LOCKED`, unlocked.WalletID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.HoldExpiry{}, nil
+	}
+	if err != nil {
+		return domain.HoldExpiry{}, fmt.Errorf("lock wallet: %w", mapError(err))
+	}
+
+	hold, err := findOrderHold(ctx, tx, orderID, "FOR UPDATE SKIP LOCKED")
+	if errors.Is(err, domain.ErrHoldNotFound) {
+		return domain.HoldExpiry{}, nil
+	}
+	if err != nil {
+		return domain.HoldExpiry{}, err
+	}
+
+	// It may have been released or filled since it was listed.
+	if !hold.IsExpired(now) {
+		return domain.HoldExpiry{}, nil
+	}
+
+	leftover, nextStatus := hold.ExpireOutcome()
+
+	if err := returnHoldFunds(ctx, tx, wallet, hold, leftover, nextStatus, domain.ReleaseExpired); err != nil {
+		return domain.HoldExpiry{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.HoldExpiry{}, fmt.Errorf("commit expire: %w", mapError(err))
+	}
+
+	return domain.HoldExpiry{Expired: true, Released: leftover}, nil
+}
+
+// returnHoldFunds closes a hold and gives leftover back to the wallet. The caller
+// must hold both row locks. An event is only recorded if money moved.
+func returnHoldFunds(ctx context.Context, tx pgx.Tx, wallet domain.Wallet, hold domain.Hold, leftover int64, nextStatus domain.HoldStatus, reason domain.ReleaseReason) error {
+	hold, err := scanHold(tx.QueryRow(ctx,
+		`UPDATE holds
+		 SET amount_released = amount_released + $1, status = $2
+		 WHERE id = $3
+		 RETURNING `+holdColumns, leftover, nextStatus, hold.ID))
+	if err != nil {
+		return fmt.Errorf("update hold: %w", mapError(err))
+	}
+
+	if leftover == 0 {
+		return nil
+	}
+
+	wallet, err = scanWallet(tx.QueryRow(ctx,
+		`UPDATE wallets
+		 SET available = available + $1, reserved = reserved - $1, version = version + 1
+		 WHERE id = $2
+		 RETURNING `+walletColumns, leftover, wallet.ID))
+	if err != nil {
+		return fmt.Errorf("return funds: %w", mapError(err))
+	}
+
+	return insertBalanceChanged(ctx, tx, wallet, hold, reason)
 }
 
 func lockWallet(ctx context.Context, tx pgx.Tx, walletID uuid.UUID) (domain.Wallet, error) {
