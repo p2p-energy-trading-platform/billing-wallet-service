@@ -233,3 +233,52 @@ func TestReleaseReasonValidate(t *testing.T) {
 		}
 	}
 }
+
+func TestHoldExpireOutcome(t *testing.T) {
+	tests := []struct {
+		name         string
+		hold         Hold
+		wantLeftover int64
+		wantStatus   HoldStatus
+	}{
+		{name: "untouched", hold: Hold{AmountTotal: 1000, Status: HoldActive}, wantLeftover: 1000, wantStatus: HoldExpired},
+		{name: "partly filled", hold: Hold{AmountTotal: 1000, AmountConsumed: 400, Status: HoldActive}, wantLeftover: 600, wantStatus: HoldExpired},
+		{name: "nothing left because it was fully filled", hold: Hold{AmountTotal: 1000, AmountConsumed: 1000, Status: HoldActive}, wantLeftover: 0, wantStatus: HoldConsumed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			leftover, status := tt.hold.ExpireOutcome()
+
+			if leftover != tt.wantLeftover || status != tt.wantStatus {
+				t.Errorf("ExpireOutcome() = %d, %s, want %d, %s", leftover, status, tt.wantLeftover, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestHoldIsExpired(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	past := now.Add(-time.Second)
+	future := now.Add(time.Second)
+
+	tests := []struct {
+		name string
+		hold Hold
+		want bool
+	}{
+		{name: "active and past expiry", hold: Hold{Status: HoldActive, ExpiresAt: &past}, want: true},
+		{name: "active and exactly at expiry", hold: Hold{Status: HoldActive, ExpiresAt: &now}, want: false},
+		{name: "active and not yet expired", hold: Hold{Status: HoldActive, ExpiresAt: &future}, want: false},
+		{name: "active with no expiry never expires", hold: Hold{Status: HoldActive}, want: false},
+		{name: "already released", hold: Hold{Status: HoldReleased, ExpiresAt: &past}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.hold.IsExpired(now); got != tt.want {
+				t.Errorf("IsExpired() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

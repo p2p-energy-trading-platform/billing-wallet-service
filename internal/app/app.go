@@ -15,6 +15,7 @@ import (
 	"billing-wallet-service/internal/store/postgres"
 	transportgrpc "billing-wallet-service/internal/transport/grpc"
 	grpcservices "billing-wallet-service/internal/transport/grpc/services"
+	"billing-wallet-service/internal/worker"
 )
 
 type App struct {
@@ -24,11 +25,15 @@ type App struct {
 	redisClient  *redis.Client
 	grpcServer   *transportgrpc.Server
 	healthServer *http.Server
+	reconciler   *worker.Reconciler
+	stopWorkers  context.CancelFunc
+	workersDone  chan struct{}
 }
 
 func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisClient *redis.Client) *App {
 	walletUsecase := service.NewWalletUsecase(postgres.NewWalletRepo(dbPool))
-	reservationUsecase := service.NewReservationUsecase(postgres.NewReservationRepo(dbPool))
+	reservationRepo := postgres.NewReservationRepo(dbPool)
+	reservationUsecase := service.NewReservationUsecase(reservationRepo)
 	grpcServer := transportgrpc.New(cfg.GRPCAddress, logger, transportgrpc.Services{
 		Wallet: grpcservices.NewWalletHandler(walletUsecase, logger),
 		Order:  grpcservices.NewOrderHandler(reservationUsecase, logger),
@@ -53,6 +58,7 @@ func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisCli
 		redisClient:  redisClient,
 		grpcServer:   grpcServer,
 		healthServer: healthServer,
+		reconciler:   worker.NewReconciler(reservationRepo, cfg.HoldSweepInterval, worker.DefaultHoldBatchSize, logger),
 	}
 }
 
@@ -78,11 +84,38 @@ func (a *App) Start(ctx context.Context) error {
 		}
 	}()
 
+	a.startWorkers()
+
 	return nil
+}
+
+// startWorkers uses its own context, because the one passed to Start only covers
+// startup and times out while the service is still running.
+func (a *App) startWorkers() {
+	if !a.cfg.HoldSweeperEnabled {
+		a.logger.Info("Hold sweeper is disabled")
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.stopWorkers = cancel
+	a.workersDone = make(chan struct{})
+
+	go func() {
+		defer close(a.workersDone)
+		a.logger.Info("Starting hold sweeper", "interval", a.cfg.HoldSweepInterval.String())
+		a.reconciler.Run(ctx)
+	}()
 }
 
 func (a *App) Stop(ctx context.Context) {
 	a.logger.Info("Shutting down application servers...")
+
+	// Workers need the database, so they stop before the pool closes.
+	if a.stopWorkers != nil {
+		a.stopWorkers()
+		<-a.workersDone
+	}
 
 	// Graceful stop for gRPC
 	a.grpcServer.SetReady(false)
