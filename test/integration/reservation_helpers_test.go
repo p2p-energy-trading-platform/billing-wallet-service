@@ -24,6 +24,7 @@ const (
 type reservationEnv struct {
 	db         *sql.DB
 	orders     billingv1.OrderBillingServiceClient
+	admin      billingv1.AdminBillingServiceClient
 	serviceURL string
 }
 
@@ -32,9 +33,12 @@ func newReservationEnv(t *testing.T) *reservationEnv {
 
 	database := migratedPostgres(t)
 
+	conn := startServer(t, database.serviceURL)
+
 	return &reservationEnv{
 		db:         database.db,
-		orders:     billingv1.NewOrderBillingServiceClient(startServer(t, database.serviceURL)),
+		orders:     billingv1.NewOrderBillingServiceClient(conn),
+		admin:      billingv1.NewAdminBillingServiceClient(conn),
 		serviceURL: database.serviceURL,
 	}
 }

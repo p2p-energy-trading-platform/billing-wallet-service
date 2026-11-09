@@ -33,10 +33,14 @@ type App struct {
 func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisClient *redis.Client) *App {
 	walletUsecase := service.NewWalletUsecase(postgres.NewWalletRepo(dbPool))
 	reservationRepo := postgres.NewReservationRepo(dbPool)
-	reservationUsecase := service.NewReservationUsecase(reservationRepo)
+	feeConfigRepo := postgres.NewFeeConfigRepo(dbPool)
+	feeConfigCache := service.NewFeeConfigCache(feeConfigRepo, service.DefaultFeeConfigCacheTTL)
+	reservationUsecase := service.NewReservationUsecase(reservationRepo, feeConfigCache)
+	feeConfigUsecase := service.NewFeeConfigUsecase(feeConfigRepo, feeConfigCache)
 	grpcServer := transportgrpc.New(cfg.GRPCAddress, logger, transportgrpc.Services{
 		Wallet: grpcservices.NewWalletHandler(walletUsecase, logger),
 		Order:  grpcservices.NewOrderHandler(reservationUsecase, logger),
+		Admin:  grpcservices.NewAdminHandler(feeConfigUsecase, logger),
 	})
 
 	// Setup basic HTTP health check server

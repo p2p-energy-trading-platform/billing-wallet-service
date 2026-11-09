@@ -59,7 +59,7 @@ func TestReserveCreditsSizesTheHoldFromTheActiveRate(t *testing.T) {
 	store := &fakeReservationStore{fee: fee, reservation: domain.Reservation{AvailableAfter: 7}}
 	before := time.Now()
 
-	reservation, err := NewReservationUsecase(store).ReserveCredits(context.Background(), validReserveRequest())
+	reservation, err := NewReservationUsecase(store, store).ReserveCredits(context.Background(), validReserveRequest())
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -85,7 +85,7 @@ func TestReserveCreditsRejectsInvalidRequestsBeforeTouchingTheStore(t *testing.T
 	request.MaxPricePerKwh = 0
 	store := &fakeReservationStore{}
 
-	_, err := NewReservationUsecase(store).ReserveCredits(context.Background(), request)
+	_, err := NewReservationUsecase(store, store).ReserveCredits(context.Background(), request)
 
 	if !errors.Is(err, domain.ErrMarketOrderNeedsCollar) {
 		t.Fatalf("error = %v, want ErrMarketOrderNeedsCollar", err)
@@ -98,7 +98,7 @@ func TestReserveCreditsRejectsInvalidRequestsBeforeTouchingTheStore(t *testing.T
 func TestReserveCreditsFailsClosedWithoutAFeeConfig(t *testing.T) {
 	store := &fakeReservationStore{feeErr: errors.New("no active fee config")}
 
-	_, err := NewReservationUsecase(store).ReserveCredits(context.Background(), validReserveRequest())
+	_, err := NewReservationUsecase(store, store).ReserveCredits(context.Background(), validReserveRequest())
 
 	if err == nil {
 		t.Fatal("expected an error")
@@ -114,7 +114,7 @@ func TestReserveCreditsRejectsAnOverflowingOrder(t *testing.T) {
 	request.MaxPricePerKwh = 1 << 62
 	store := &fakeReservationStore{}
 
-	_, err := NewReservationUsecase(store).ReserveCredits(context.Background(), request)
+	_, err := NewReservationUsecase(store, store).ReserveCredits(context.Background(), request)
 
 	if !errors.Is(err, domain.ErrBadAmount) {
 		t.Fatalf("error = %v, want ErrBadAmount", err)
@@ -127,7 +127,7 @@ func TestReserveCreditsRejectsAnOverflowingOrder(t *testing.T) {
 func TestReleaseReservationRejectsAnUnknownReason(t *testing.T) {
 	store := &fakeReservationStore{}
 
-	_, err := NewReservationUsecase(store).ReleaseReservation(context.Background(), uuid.New(), "")
+	_, err := NewReservationUsecase(store, store).ReleaseReservation(context.Background(), uuid.New(), "")
 
 	if !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("error = %v, want ErrValidation", err)
@@ -140,7 +140,7 @@ func TestReleaseReservationRejectsAnUnknownReason(t *testing.T) {
 func TestReleaseReservationReturnsTheStoreResult(t *testing.T) {
 	store := &fakeReservationStore{released: 600}
 
-	released, err := NewReservationUsecase(store).ReleaseReservation(context.Background(), uuid.New(), domain.ReleaseFilled)
+	released, err := NewReservationUsecase(store, store).ReleaseReservation(context.Background(), uuid.New(), domain.ReleaseFilled)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

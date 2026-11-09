@@ -33,6 +33,7 @@ var domainErrors = []struct {
 	{domain.ErrAlreadySettled, codes.AlreadyExists, "ALREADY_SETTLED"},
 	{domain.ErrWebhookSignatureInvalid, codes.InvalidArgument, "WEBHOOK_SIGNATURE_INVALID"},
 	{domain.ErrRetryableContention, codes.Aborted, "RETRYABLE_CONTENTION"},
+	{domain.ErrCallerNotAllowed, codes.PermissionDenied, "CALLER_NOT_ALLOWED"},
 }
 
 func ToGRPCError(err error) error {
