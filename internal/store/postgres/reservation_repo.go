@@ -29,24 +29,6 @@ func NewReservationRepo(pool *pgxpool.Pool) *ReservationRepo {
 	return &ReservationRepo{pool: pool}
 }
 
-// ActiveFeeConfig returns the latest config in effect at the given time. It fails
-// rather than guessing a rate when there is none.
-func (r *ReservationRepo) ActiveFeeConfig(ctx context.Context, at time.Time) (domain.FeeConfig, error) {
-	var fee domain.FeeConfig
-	err := r.pool.QueryRow(ctx,
-		`SELECT id, buyer_fee_bps, seller_fee_bps, effective_from, created_by, created_at
-		 FROM fee_configs
-		 WHERE effective_from <= $1
-		 ORDER BY effective_from DESC, created_at DESC
-		 LIMIT 1`, at).
-		Scan(&fee.ID, &fee.BuyerFeeBps, &fee.SellerFeeBps, &fee.EffectiveFrom, &fee.CreatedBy, &fee.CreatedAt)
-	if err != nil {
-		return domain.FeeConfig{}, fmt.Errorf("find active fee config: %w", mapError(err))
-	}
-
-	return fee, nil
-}
-
 // ReserveHold moves amount from available to reserved and records the hold in one
 // transaction. The replay check runs while holding the wallet lock, so concurrent
 // retries of one order wait for each other and cannot lock the funds twice.

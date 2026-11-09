@@ -44,6 +44,7 @@ func TestToGRPCErrorMapsDomainErrors(t *testing.T) {
 		{err: domain.NewValidationError("order_id", "must be a UUID"), wantCode: codes.InvalidArgument, wantReason: "VALIDATION_FAILED"},
 		{err: domain.NewBadAmountError("qty_wh", "must be positive"), wantCode: codes.InvalidArgument, wantReason: "BAD_AMOUNT"},
 		{err: domain.ErrRetryableContention, wantCode: codes.Aborted, wantReason: "RETRYABLE_CONTENTION"},
+		{err: domain.ErrCallerNotAllowed, wantCode: codes.PermissionDenied, wantReason: "CALLER_NOT_ALLOWED"},
 	}
 
 	for _, tt := range tests {

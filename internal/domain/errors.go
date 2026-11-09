@@ -53,6 +53,7 @@ var (
 	ErrWebhookSignatureInvalid = errors.New("domain: stripe webhook signature verification failed")
 	ErrAlreadySettled          = errors.New("domain: trade already settled")
 	ErrUnbalancedJournal       = errors.New("domain: journal lines do not sum to zero")
+	ErrCallerNotAllowed        = errors.New("domain: caller is not allowed to perform this action")
 )
 
 // ErrUnavailable marks an infrastructure failure that is worth retrying, such as

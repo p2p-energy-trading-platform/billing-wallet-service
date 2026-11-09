@@ -38,9 +38,11 @@ func startServer(t *testing.T, serviceURL string) *grpc.ClientConn {
 	}
 	t.Cleanup(pool.Close)
 
+	feeConfigs := postgres.NewFeeConfigRepo(pool)
 	server := transportgrpc.New("127.0.0.1:0", logger, transportgrpc.Services{
 		Wallet: grpcservices.NewWalletHandler(service.NewWalletUsecase(postgres.NewWalletRepo(pool)), logger),
-		Order:  grpcservices.NewOrderHandler(service.NewReservationUsecase(postgres.NewReservationRepo(pool)), logger),
+		Order:  grpcservices.NewOrderHandler(service.NewReservationUsecase(postgres.NewReservationRepo(pool), feeConfigs), logger),
+		Admin:  grpcservices.NewAdminHandler(service.NewFeeConfigUsecase(feeConfigs, noCache{}), logger),
 	})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -58,6 +60,12 @@ func startServer(t *testing.T, serviceURL string) *grpc.ClientConn {
 
 	return conn
 }
+
+// noCache leaves caching out of the integration server, so a test can change rates
+// directly in the database and see them at once.
+type noCache struct{}
+
+func (noCache) Invalidate() {}
 
 func startWalletServer(t *testing.T, serviceURL string) billingv1.WalletServiceClient {
 	t.Helper()

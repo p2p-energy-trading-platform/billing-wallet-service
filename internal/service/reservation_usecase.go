@@ -11,7 +11,6 @@ import (
 )
 
 type ReservationStore interface {
-	ActiveFeeConfig(ctx context.Context, at time.Time) (domain.FeeConfig, error)
 	// ReserveHold locks amount and snapshots the fee rate. A retry of the same order
 	// returns the original hold, whatever amount and rate are passed this time.
 	ReserveHold(ctx context.Context, request domain.ReserveRequest, fee domain.FeeConfig, amount int64) (domain.Reservation, error)
@@ -20,10 +19,11 @@ type ReservationStore interface {
 
 type ReservationUsecase struct {
 	store ReservationStore
+	fees  FeeRates
 }
 
-func NewReservationUsecase(store ReservationStore) *ReservationUsecase {
-	return &ReservationUsecase{store: store}
+func NewReservationUsecase(store ReservationStore, fees FeeRates) *ReservationUsecase {
+	return &ReservationUsecase{store: store, fees: fees}
 }
 
 // ReserveCredits locks what a buy order could cost at its maximum price. Billing
@@ -35,7 +35,7 @@ func (u *ReservationUsecase) ReserveCredits(ctx context.Context, request domain.
 		return domain.Reservation{}, err
 	}
 
-	fee, err := u.store.ActiveFeeConfig(ctx, now)
+	fee, err := u.fees.ActiveFeeConfig(ctx, now)
 	if err != nil {
 		return domain.Reservation{}, fmt.Errorf("load active fee config: %w", err)
 	}

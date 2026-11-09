@@ -18,6 +18,7 @@ const gracefulStopTimeout = 5 * time.Second
 type Services struct {
 	Wallet billingv1.WalletServiceServer
 	Order  billingv1.OrderBillingServiceServer
+	Admin  billingv1.AdminBillingServiceServer
 }
 
 type Server struct {
@@ -51,6 +52,7 @@ func New(address string, logger *slog.Logger, services Services) *Server {
 
 	billingv1.RegisterWalletServiceServer(server, services.Wallet)
 	billingv1.RegisterOrderBillingServiceServer(server, services.Order)
+	billingv1.RegisterAdminBillingServiceServer(server, services.Admin)
 
 	return &Server{
 		address: address,
