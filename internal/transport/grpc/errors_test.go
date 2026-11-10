@@ -87,6 +87,20 @@ func TestToGRPCErrorHidesInfrastructureDetails(t *testing.T) {
 	}
 }
 
+// The caller should retry, but the SQL behind the contention is not theirs to see.
+func TestToGRPCErrorHidesContentionDetails(t *testing.T) {
+	err := fmt.Errorf("%w: ERROR: deadlock detected (SQLSTATE 40P01) on relation wallets", domain.ErrRetryableContention)
+
+	got := ToGRPCError(err)
+
+	if status.Code(got) != codes.Aborted || errorReason(t, got) != "RETRYABLE_CONTENTION" {
+		t.Errorf("got %v, want Aborted with RETRYABLE_CONTENTION", got)
+	}
+	if strings.Contains(got.Error(), "SQLSTATE") || strings.Contains(got.Error(), "wallets") {
+		t.Errorf("error %q leaks database details", got)
+	}
+}
+
 func TestToGRPCErrorKeepsExistingStatus(t *testing.T) {
 	original := status.Error(codes.Unauthenticated, "no user")
 

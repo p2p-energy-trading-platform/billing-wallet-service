@@ -37,9 +37,10 @@ func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisCli
 	feeConfigCache := service.NewFeeConfigCache(feeConfigRepo, service.DefaultFeeConfigCacheTTL)
 	reservationUsecase := service.NewReservationUsecase(reservationRepo, feeConfigCache)
 	feeConfigUsecase := service.NewFeeConfigUsecase(feeConfigRepo, feeConfigCache)
+	settlementUsecase := service.NewSettlementUsecase(postgres.NewSettlementRepo(dbPool), feeConfigCache)
 	grpcServer := transportgrpc.New(cfg.GRPCAddress, logger, transportgrpc.Services{
 		Wallet: grpcservices.NewWalletHandler(walletUsecase, logger),
-		Order:  grpcservices.NewOrderHandler(reservationUsecase, logger),
+		Order:  grpcservices.NewOrderHandler(reservationUsecase, settlementUsecase, logger),
 		Admin:  grpcservices.NewAdminHandler(feeConfigUsecase, logger),
 	})
 

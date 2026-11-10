@@ -41,8 +41,12 @@ func startServer(t *testing.T, serviceURL string) *grpc.ClientConn {
 	feeConfigs := postgres.NewFeeConfigRepo(pool)
 	server := transportgrpc.New("127.0.0.1:0", logger, transportgrpc.Services{
 		Wallet: grpcservices.NewWalletHandler(service.NewWalletUsecase(postgres.NewWalletRepo(pool)), logger),
-		Order:  grpcservices.NewOrderHandler(service.NewReservationUsecase(postgres.NewReservationRepo(pool), feeConfigs), logger),
-		Admin:  grpcservices.NewAdminHandler(service.NewFeeConfigUsecase(feeConfigs, noCache{}), logger),
+		Order: grpcservices.NewOrderHandler(
+			service.NewReservationUsecase(postgres.NewReservationRepo(pool), feeConfigs),
+			service.NewSettlementUsecase(postgres.NewSettlementRepo(pool), feeConfigs),
+			logger,
+		),
+		Admin: grpcservices.NewAdminHandler(service.NewFeeConfigUsecase(feeConfigs, noCache{}), logger),
 	})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

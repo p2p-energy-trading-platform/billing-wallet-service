@@ -11,9 +11,8 @@ import (
 // DefaultFeeConfigCacheTTL bounds how long a replica can keep using a replaced rate.
 const DefaultFeeConfigCacheTTL = 30 * time.Second
 
-type FeeRates interface {
-	ActiveFeeConfig(ctx context.Context, at time.Time) (domain.FeeConfig, error)
-}
+// FeeRates looks up the fee config in effect at a given time.
+type FeeRates = domain.FeeRates
 
 // FeeRateSource is what the cache reads from.
 type FeeRateSource interface {
