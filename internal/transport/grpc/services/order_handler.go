@@ -15,14 +15,19 @@ type ReservationUsecase interface {
 	ReleaseReservation(ctx context.Context, orderID uuid.UUID, reason domain.ReleaseReason) (int64, error)
 }
 
-type OrderHandler struct {
-	billingv1.UnimplementedOrderBillingServiceServer
-	usecase ReservationUsecase
-	logger  *slog.Logger
+type SettlementUsecase interface {
+	SettleTrade(ctx context.Context, request domain.SettleRequest) (domain.SettlementResult, error)
 }
 
-func NewOrderHandler(usecase ReservationUsecase, logger *slog.Logger) *OrderHandler {
-	return &OrderHandler{usecase: usecase, logger: logger}
+type OrderHandler struct {
+	billingv1.UnimplementedOrderBillingServiceServer
+	usecase     ReservationUsecase
+	settlements SettlementUsecase
+	logger      *slog.Logger
+}
+
+func NewOrderHandler(usecase ReservationUsecase, settlements SettlementUsecase, logger *slog.Logger) *OrderHandler {
+	return &OrderHandler{usecase: usecase, settlements: settlements, logger: logger}
 }
 
 func (h *OrderHandler) ReserveCredits(ctx context.Context, request *billingv1.ReserveCreditsRequest) (*billingv1.ReserveCreditsResponse, error) {
@@ -72,6 +77,58 @@ func (h *OrderHandler) ReleaseReservation(ctx context.Context, request *billingv
 	}
 
 	return &billingv1.ReleaseReservationResponse{ReleasedAmount: released}, nil
+}
+
+func (h *OrderHandler) SettleTrade(ctx context.Context, request *billingv1.SettleTradeRequest) (*billingv1.SettleTradeResponse, error) {
+	var tradeID, buyOrderID, sellOrderID, buyerUserID, sellerUserID uuid.UUID
+	for _, id := range []struct {
+		field string
+		value string
+		into  *uuid.UUID
+	}{
+		{"trade_id", request.GetTradeId(), &tradeID},
+		{"buy_order_id", request.GetBuyOrderId(), &buyOrderID},
+		{"sell_order_id", request.GetSellOrderId(), &sellOrderID},
+		{"buyer_user_id", request.GetBuyerUserId(), &buyerUserID},
+		{"seller_user_id", request.GetSellerUserId(), &sellerUserID},
+	} {
+		parsed, err := parseUUID(id.field, id.value)
+		if err != nil {
+			return nil, toStatus(h.logger, err)
+		}
+		*id.into = parsed
+	}
+
+	if request.GetExecutedAt() == nil {
+		return nil, toStatus(h.logger, domain.NewValidationError("executed_at", "is required"))
+	}
+	if err := request.GetExecutedAt().CheckValid(); err != nil {
+		return nil, toStatus(h.logger, domain.NewValidationError("executed_at", "is out of range"))
+	}
+
+	result, err := h.settlements.SettleTrade(ctx, domain.SettleRequest{
+		TradeID:       tradeID,
+		BuyOrderID:    buyOrderID,
+		SellOrderID:   sellOrderID,
+		BuyerUserID:   buyerUserID,
+		SellerUserID:  sellerUserID,
+		QtyWh:         request.GetQtyWh(),
+		PricePerKwh:   request.GetPricePerKwh(),
+		BuyOrderFinal: request.GetBuyOrderFinal(),
+		ExecutedAt:    request.GetExecutedAt().AsTime(),
+	})
+	if err != nil {
+		return nil, toStatus(h.logger, err)
+	}
+
+	return &billingv1.SettleTradeResponse{
+		SettlementId:           result.SettlementID.String(),
+		TradeValue:             result.TradeValue,
+		BuyerFee:               result.BuyerFee,
+		SellerFee:              result.SellerFee,
+		BuyerReleasedRemainder: result.BuyerReleasedRemainder,
+		AlreadySettled:         result.AlreadySettled,
+	}, nil
 }
 
 func parseUUID(field, value string) (uuid.UUID, error) {
