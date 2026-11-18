@@ -15,25 +15,26 @@ const errorDomain = "billing.gridx"
 // domainErrors maps domain errors to the gRPC codes and typed reasons in the API
 // contract. Reasons are what callers should branch on.
 var domainErrors = []struct {
-	target error
-	code   codes.Code
-	reason string
+	target  error
+	code    codes.Code
+	reason  string
+	message string // fixed message, for errors whose cause must not reach callers
 }{
 	// ErrBadAmount also matches ErrValidation, so it has to be checked first.
-	{domain.ErrBadAmount, codes.InvalidArgument, "BAD_AMOUNT"},
-	{domain.ErrValidation, codes.InvalidArgument, "VALIDATION_FAILED"},
-	{domain.ErrMarketOrderNeedsCollar, codes.InvalidArgument, "MARKET_ORDER_NEEDS_COLLAR"},
-	{domain.ErrInsufficientFunds, codes.FailedPrecondition, "INSUFFICIENT_FUNDS"},
-	{domain.ErrWalletFrozen, codes.FailedPrecondition, "WALLET_FROZEN"},
-	{domain.ErrHoldInsufficient, codes.FailedPrecondition, "HOLD_INSUFFICIENT_REMAINING"},
-	{domain.ErrPriceExceedsReservation, codes.FailedPrecondition, "PRICE_EXCEEDS_RESERVATION"},
-	{domain.ErrNotFound, codes.NotFound, "NOT_FOUND"},
-	{domain.ErrHoldNotFound, codes.NotFound, "HOLD_NOT_FOUND"},
-	{domain.ErrIdempotencyConflict, codes.AlreadyExists, "IDEMPOTENCY_CONFLICT"},
-	{domain.ErrAlreadySettled, codes.AlreadyExists, "ALREADY_SETTLED"},
-	{domain.ErrWebhookSignatureInvalid, codes.InvalidArgument, "WEBHOOK_SIGNATURE_INVALID"},
-	{domain.ErrRetryableContention, codes.Aborted, "RETRYABLE_CONTENTION"},
-	{domain.ErrCallerNotAllowed, codes.PermissionDenied, "CALLER_NOT_ALLOWED"},
+	{domain.ErrBadAmount, codes.InvalidArgument, "BAD_AMOUNT", ""},
+	{domain.ErrValidation, codes.InvalidArgument, "VALIDATION_FAILED", ""},
+	{domain.ErrMarketOrderNeedsCollar, codes.InvalidArgument, "MARKET_ORDER_NEEDS_COLLAR", ""},
+	{domain.ErrInsufficientFunds, codes.FailedPrecondition, "INSUFFICIENT_FUNDS", ""},
+	{domain.ErrWalletFrozen, codes.FailedPrecondition, "WALLET_FROZEN", ""},
+	{domain.ErrHoldInsufficient, codes.FailedPrecondition, "HOLD_INSUFFICIENT_REMAINING", ""},
+	{domain.ErrPriceExceedsReservation, codes.FailedPrecondition, "PRICE_EXCEEDS_RESERVATION", ""},
+	{domain.ErrNotFound, codes.NotFound, "NOT_FOUND", ""},
+	{domain.ErrHoldNotFound, codes.NotFound, "HOLD_NOT_FOUND", ""},
+	{domain.ErrIdempotencyConflict, codes.AlreadyExists, "IDEMPOTENCY_CONFLICT", ""},
+	{domain.ErrAlreadySettled, codes.AlreadyExists, "ALREADY_SETTLED", ""},
+	{domain.ErrWebhookSignatureInvalid, codes.InvalidArgument, "WEBHOOK_SIGNATURE_INVALID", ""},
+	{domain.ErrRetryableContention, codes.Aborted, "RETRYABLE_CONTENTION", "transaction conflicted with another, retry"},
+	{domain.ErrCallerNotAllowed, codes.PermissionDenied, "CALLER_NOT_ALLOWED", ""},
 }
 
 func ToGRPCError(err error) error {
@@ -56,7 +57,11 @@ func ToGRPCError(err error) error {
 
 	for _, mapping := range domainErrors {
 		if errors.Is(err, mapping.target) {
-			return statusWithReason(mapping.code, mapping.reason, err.Error())
+			message := mapping.message
+			if message == "" {
+				message = err.Error()
+			}
+			return statusWithReason(mapping.code, mapping.reason, message)
 		}
 	}
 

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func TestReserveCreditsMapsTheRequestAndResponse(t *testing.T) {
 		AvailableAfter: 5354,
 	}}
 
-	response, err := NewOrderHandler(usecase, discardLogger()).ReserveCredits(context.Background(), &billingv1.ReserveCreditsRequest{
+	response, err := NewOrderHandler(usecase, &fakeSettlementUsecase{}, discardLogger()).ReserveCredits(context.Background(), &billingv1.ReserveCreditsRequest{
 		UserId:         userID.String(),
 		OrderId:        orderID.String(),
 		OrderType:      billingv1.OrderType_ORDER_TYPE_MARKET,
@@ -73,7 +74,7 @@ func TestReserveCreditsMapsTheRequestAndResponse(t *testing.T) {
 func TestReserveCreditsLeavesExpiryUnsetWhenNotGiven(t *testing.T) {
 	usecase := &fakeReservationUsecase{}
 
-	_, err := NewOrderHandler(usecase, discardLogger()).ReserveCredits(context.Background(), &billingv1.ReserveCreditsRequest{
+	_, err := NewOrderHandler(usecase, &fakeSettlementUsecase{}, discardLogger()).ReserveCredits(context.Background(), &billingv1.ReserveCreditsRequest{
 		UserId:  uuid.NewString(),
 		OrderId: uuid.NewString(),
 	})
@@ -95,7 +96,7 @@ func TestReserveCreditsRejectsMalformedIDsBeforeTheUsecase(t *testing.T) {
 	for _, request := range tests {
 		usecase := &fakeReservationUsecase{}
 
-		_, err := NewOrderHandler(usecase, discardLogger()).ReserveCredits(context.Background(), request)
+		_, err := NewOrderHandler(usecase, &fakeSettlementUsecase{}, discardLogger()).ReserveCredits(context.Background(), request)
 
 		if code := status.Code(err); code != codes.InvalidArgument {
 			t.Errorf("code = %v, want InvalidArgument", code)
@@ -136,7 +137,7 @@ func TestReleaseReservationMapsTheRequestAndResponse(t *testing.T) {
 	orderID := uuid.New()
 	usecase := &fakeReservationUsecase{released: 600}
 
-	response, err := NewOrderHandler(usecase, discardLogger()).ReleaseReservation(context.Background(), &billingv1.ReleaseReservationRequest{
+	response, err := NewOrderHandler(usecase, &fakeSettlementUsecase{}, discardLogger()).ReleaseReservation(context.Background(), &billingv1.ReleaseReservationRequest{
 		OrderId: orderID.String(),
 		Reason:  billingv1.ReleaseReason_RELEASE_REASON_FILLED,
 	})
@@ -154,7 +155,7 @@ func TestReleaseReservationMapsTheRequestAndResponse(t *testing.T) {
 
 func TestOrderHandlerMapsUsecaseErrors(t *testing.T) {
 	usecase := &fakeReservationUsecase{err: errors.Join(domain.ErrInsufficientFunds)}
-	handler := NewOrderHandler(usecase, discardLogger())
+	handler := NewOrderHandler(usecase, &fakeSettlementUsecase{}, discardLogger())
 
 	_, reserveErr := handler.ReserveCredits(context.Background(), &billingv1.ReserveCreditsRequest{
 		UserId:  uuid.NewString(),
@@ -167,6 +168,107 @@ func TestOrderHandlerMapsUsecaseErrors(t *testing.T) {
 	for _, err := range []error{reserveErr, releaseErr} {
 		if code := status.Code(err); code != codes.FailedPrecondition {
 			t.Errorf("code = %v, want FailedPrecondition", code)
+		}
+	}
+}
+
+type fakeSettlementUsecase struct {
+	result  domain.SettlementResult
+	err     error
+	request domain.SettleRequest
+	calls   int
+}
+
+func (f *fakeSettlementUsecase) SettleTrade(_ context.Context, request domain.SettleRequest) (domain.SettlementResult, error) {
+	f.calls++
+	f.request = request
+	return f.result, f.err
+}
+
+func settleTradeRequest() *billingv1.SettleTradeRequest {
+	return &billingv1.SettleTradeRequest{
+		TradeId: uuid.NewString(), BuyOrderId: uuid.NewString(), SellOrderId: uuid.NewString(),
+		BuyerUserId: uuid.NewString(), SellerUserId: uuid.NewString(),
+		QtyWh: 1000, PricePerKwh: 4550, BuyOrderFinal: true,
+		ExecutedAt: timestamppb.New(time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)),
+	}
+}
+
+func TestSettleTradeMapsTheRequestAndResponse(t *testing.T) {
+	settlementID := uuid.New()
+	settlements := &fakeSettlementUsecase{result: domain.SettlementResult{
+		SettlementID: settlementID, TradeValue: 4550, BuyerFee: 46, SellerFee: 46, BuyerReleasedRemainder: 50, AlreadySettled: true,
+	}}
+	request := settleTradeRequest()
+
+	response, err := NewOrderHandler(&fakeReservationUsecase{}, settlements, discardLogger()).SettleTrade(context.Background(), request)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := settlements.request
+	if got.TradeID.String() != request.GetTradeId() || got.BuyOrderID.String() != request.GetBuyOrderId() ||
+		got.SellOrderID.String() != request.GetSellOrderId() || got.BuyerUserID.String() != request.GetBuyerUserId() ||
+		got.SellerUserID.String() != request.GetSellerUserId() || got.QtyWh != 1000 || got.PricePerKwh != 4550 ||
+		!got.BuyOrderFinal || !got.ExecutedAt.Equal(request.GetExecutedAt().AsTime()) {
+		t.Errorf("request = %+v", got)
+	}
+	if response.GetSettlementId() != settlementID.String() || response.GetTradeValue() != 4550 || response.GetBuyerFee() != 46 ||
+		response.GetSellerFee() != 46 || response.GetBuyerReleasedRemainder() != 50 || !response.GetAlreadySettled() {
+		t.Errorf("response = %v", response)
+	}
+}
+
+func TestSettleTradeRejectsMalformedInputBeforeTheUsecase(t *testing.T) {
+	tests := map[string]func(*billingv1.SettleTradeRequest){
+		"bad trade id":      func(r *billingv1.SettleTradeRequest) { r.TradeId = "nope" },
+		"bad buy order":     func(r *billingv1.SettleTradeRequest) { r.BuyOrderId = "nope" },
+		"bad sell order":    func(r *billingv1.SettleTradeRequest) { r.SellOrderId = "nope" },
+		"bad buyer":         func(r *billingv1.SettleTradeRequest) { r.BuyerUserId = "nope" },
+		"bad seller":        func(r *billingv1.SettleTradeRequest) { r.SellerUserId = "nope" },
+		"no execution time": func(r *billingv1.SettleTradeRequest) { r.ExecutedAt = nil },
+		"execution time out of range": func(r *billingv1.SettleTradeRequest) {
+			r.ExecutedAt = &timestamppb.Timestamp{Seconds: 253402300800}
+		},
+	}
+
+	for name, change := range tests {
+		t.Run(name, func(t *testing.T) {
+			settlements := &fakeSettlementUsecase{}
+			request := settleTradeRequest()
+			change(request)
+
+			_, err := NewOrderHandler(&fakeReservationUsecase{}, settlements, discardLogger()).SettleTrade(context.Background(), request)
+
+			if code := status.Code(err); code != codes.InvalidArgument {
+				t.Errorf("code = %v, want InvalidArgument", code)
+			}
+			if settlements.calls != 0 {
+				t.Error("usecase must not be called")
+			}
+		})
+	}
+}
+
+func TestSettleTradeMapsUsecaseErrors(t *testing.T) {
+	settlements := &fakeSettlementUsecase{err: domain.ErrPriceExceedsReservation}
+
+	_, err := NewOrderHandler(&fakeReservationUsecase{}, settlements, discardLogger()).SettleTrade(context.Background(), settleTradeRequest())
+
+	if code := status.Code(err); code != codes.FailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", code)
+	}
+}
+
+func TestSettleTradeNamesTheFirstBadFieldEveryTime(t *testing.T) {
+	request := settleTradeRequest()
+	request.TradeId, request.SellerUserId = "nope", "nope"
+
+	for range 20 {
+		_, err := NewOrderHandler(&fakeReservationUsecase{}, &fakeSettlementUsecase{}, discardLogger()).SettleTrade(context.Background(), request)
+
+		if message := status.Convert(err).Message(); !strings.Contains(message, `"trade_id"`) {
+			t.Fatalf("error = %q, want it to name trade_id", message)
 		}
 	}
 }

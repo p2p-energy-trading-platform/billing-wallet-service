@@ -93,7 +93,7 @@ func (r *ReservationRepo) ReserveHold(ctx context.Context, request domain.Reserv
 		return domain.Reservation{}, fmt.Errorf("insert hold: %w", mapError(err))
 	}
 
-	if err := insertBalanceChanged(ctx, tx, wallet, hold, ""); err != nil {
+	if err := insertBalanceChanged(ctx, tx, wallet, balanceChange{OrderID: hold.RefID, HoldID: hold.ID}); err != nil {
 		return domain.Reservation{}, err
 	}
 
@@ -242,7 +242,7 @@ func returnHoldFunds(ctx context.Context, tx pgx.Tx, wallet domain.Wallet, hold 
 		return fmt.Errorf("return funds: %w", mapError(err))
 	}
 
-	return insertBalanceChanged(ctx, tx, wallet, hold, reason)
+	return insertBalanceChanged(ctx, tx, wallet, balanceChange{OrderID: hold.RefID, HoldID: hold.ID, Reason: string(reason)})
 }
 
 func lockWallet(ctx context.Context, tx pgx.Tx, walletID uuid.UUID) (domain.Wallet, error) {

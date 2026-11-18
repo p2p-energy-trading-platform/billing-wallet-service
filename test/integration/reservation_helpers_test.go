@@ -50,6 +50,8 @@ func (e *reservationEnv) fund(t *testing.T, available int64) uuid.UUID {
 
 	userID := uuid.New()
 	exec(t, e.db, `INSERT INTO wallets (user_id, available) VALUES ($1, $2)`, userID, available)
+	exec(t, e.db, `INSERT INTO ledger_accounts (type, wallet_id, name)
+	               SELECT 'USER_WALLET', id, 'test' FROM wallets WHERE user_id = $1`, userID)
 
 	return userID
 }
