@@ -193,9 +193,36 @@ task db:down
 
 ---
 
-# Run the Application Locally
+# Local Stripe Setup (Test Mode)
+
+1. **Get your sandbox secret key (`STRIPE_SECRET_KEY`):**
+    - Sign in to your Stripe account (Test mode works from any country) and switch to **Test mode**.
+    - Copy your test secret key (`sk_test_...`) from the Stripe Dashboard **API keys** section.
+
+2. **Install and authenticate the Stripe CLI:**
+    - Install the Stripe CLI and run `stripe login` to authenticate with your test account.
+
+3. **Forward webhooks and obtain your signing secret (`STRIPE_WEBHOOK_SECRET`):**
+    - Run the Stripe CLI listener pointing to your local gateway webhook route:
+        ```bash
+        stripe listen --forward-to http://localhost:<gateway-port>/webhooks/stripe
+        ```
+    - Copy the `whsec_...` webhook signing secret printed in the CLI output.
+
+4. **Configure local environment variables:**
+    ```bash
+    STRIPE_SECRET_KEY=sk_test_...
+    STRIPE_WEBHOOK_SECRET=whsec_...
+    STRIPE_CURRENCY=lkr          # default is lkr
+    CREDITS_PER_USD=             # only needed when charging in usd
+    ```
+
+5. Test checkout & webhook delivery:
+    - Trigger a deposit intent, complete the hosted Checkout page using Stripe test cards (4242 4242 4242 4242 for success, 4000 0000 0000 9995 for declined/insufficient funds, 4000 0025 0000 3155 for 3-D Secure), and verify the forwarded event is processed.
 
 ---
+
+# Run the Application Locally
 
 ## Option 1: Infrastructure in Docker, Service on Host
 
