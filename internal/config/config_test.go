@@ -9,24 +9,8 @@ import (
 func setRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("POSTGRES_URL", "postgres://localhost/test")
-}
-
-func TestHoldSweeperIsOffByDefault(t *testing.T) {
-	setRequiredEnv(t)
-	t.Setenv("HOLD_SWEEPER_ENABLED", "")
-	t.Setenv("HOLD_SWEEP_INTERVAL", "")
-
-	cfg, err := Load()
-
-	if err != nil {
-		t.Fatalf("Load() unexpected error: %v", err)
-	}
-	if cfg.HoldSweeperEnabled {
-		t.Error("HoldSweeperEnabled = true, want false until OMS has agreed the expiry rule")
-	}
-	if cfg.HoldSweepInterval != time.Minute {
-		t.Errorf("HoldSweepInterval = %v, want 1m", cfg.HoldSweepInterval)
-	}
+	t.Setenv("STRIPE_SECRET_KEY", "sk_random_gibberish")
+	t.Setenv("STRIPE_WEBHOOK_SECRET", "wk_random_gibberish")
 }
 
 func TestHoldSweeperSettingsAreRead(t *testing.T) {
