@@ -2,12 +2,16 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"testing"
 	"time"
 
 	"billing-wallet-service/internal/domain"
+	"billing-wallet-service/internal/service"
+	"billing-wallet-service/internal/store/postgres"
 
 	"github.com/google/uuid"
 	billingv1 "github.com/p2p-energy-trading-platform/go-sdk/gen/gridx/billing/v1"
@@ -27,6 +31,30 @@ func (f *fakeWalletUsecase) GetWallet(_ context.Context, userID uuid.UUID) (doma
 	f.calls++
 	f.userID = userID
 	return f.wallet, f.err
+}
+
+func (f *fakeWalletUsecase) CreateDepositIntent(context.Context, service.CreateDepositInput) (service.DepositIntentResult, error) {
+	return service.DepositIntentResult{}, nil
+}
+
+func (f *fakeWalletUsecase) ConfirmDeposit(context.Context, http.Header, []byte) (postgres.DepositConfirmOutcome, error) {
+	return postgres.DepositConfirmOutcome{}, nil
+}
+
+func (f *fakeWalletUsecase) GetDeposit(context.Context, uuid.UUID, uuid.UUID) (domain.Deposit, error) {
+	return domain.Deposit{}, nil
+}
+
+func (f *fakeWalletUsecase) RequestWithdrawal(context.Context, uuid.UUID, int64, json.RawMessage) (domain.Withdrawal, error) {
+	return domain.Withdrawal{}, nil
+}
+
+func (f *fakeWalletUsecase) CancelWithdrawal(context.Context, uuid.UUID, uuid.UUID) (domain.Withdrawal, error) {
+	return domain.Withdrawal{}, nil
+}
+
+func (f *fakeWalletUsecase) ListWithdrawals(context.Context, uuid.UUID, int) ([]domain.Withdrawal, error) {
+	return nil, nil
 }
 
 func discardLogger() *slog.Logger {
