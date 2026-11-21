@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 
 	"billing-wallet-service/internal/domain"
@@ -15,6 +17,14 @@ type fakeWalletStore struct {
 	findErr    error
 	createErr  error
 	created    []uuid.UUID
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func newTestWalletUsecase(store WalletStore) *WalletUsecase {
+	return NewWalletUsecase(store, nil, nil, nil, DepositConfig{}, discardLogger())
 }
 
 func (f *fakeWalletStore) FindWalletByUserID(context.Context, uuid.UUID) (domain.Wallet, error) {
@@ -33,7 +43,7 @@ func TestGetWalletReturnsExistingWalletWithoutCreating(t *testing.T) {
 	userID := uuid.New()
 	store := &fakeWalletStore{findWallet: domain.Wallet{UserID: userID, Available: 500}}
 
-	wallet, err := NewWalletUsecase(store).GetWallet(context.Background(), userID)
+	wallet, err := newTestWalletUsecase(store).GetWallet(context.Background(), userID)
 
 	if err != nil {
 		t.Fatalf("GetWallet() unexpected error: %v", err)
@@ -50,7 +60,7 @@ func TestGetWalletCreatesWalletOnFirstUse(t *testing.T) {
 	userID := uuid.New()
 	store := &fakeWalletStore{findErr: domain.ErrNotFound}
 
-	wallet, err := NewWalletUsecase(store).GetWallet(context.Background(), userID)
+	wallet, err := newTestWalletUsecase(store).GetWallet(context.Background(), userID)
 
 	if err != nil {
 		t.Fatalf("GetWallet() unexpected error: %v", err)
@@ -66,7 +76,7 @@ func TestGetWalletCreatesWalletOnFirstUse(t *testing.T) {
 func TestGetWalletDoesNotCreateWhenLookupFails(t *testing.T) {
 	store := &fakeWalletStore{findErr: domain.ErrUnavailable}
 
-	_, err := NewWalletUsecase(store).GetWallet(context.Background(), uuid.New())
+	_, err := newTestWalletUsecase(store).GetWallet(context.Background(), uuid.New())
 
 	if !errors.Is(err, domain.ErrUnavailable) {
 		t.Fatalf("GetWallet() error = %v, want ErrUnavailable", err)
@@ -79,7 +89,7 @@ func TestGetWalletDoesNotCreateWhenLookupFails(t *testing.T) {
 func TestGetWalletReturnsCreateFailure(t *testing.T) {
 	store := &fakeWalletStore{findErr: domain.ErrNotFound, createErr: domain.ErrUnavailable}
 
-	_, err := NewWalletUsecase(store).GetWallet(context.Background(), uuid.New())
+	_, err := newTestWalletUsecase(store).GetWallet(context.Background(), uuid.New())
 
 	if !errors.Is(err, domain.ErrUnavailable) {
 		t.Fatalf("GetWallet() error = %v, want ErrUnavailable", err)
