@@ -46,5 +46,17 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid HOLD_SWEEP_INTERVAL: %s (must be positive)", c.HoldSweepInterval)
 	}
 
+	if c.DepositSweeperInterval <= 0 {
+		return fmt.Errorf("invalid DEPOSIT_SWEEPER_INTERVAL: %s (must be positive)", c.DepositSweeperInterval)
+	}
+
+	if c.StripeSecretKey == "" {
+		return fmt.Errorf("STRIPE_SECRET_KEY is required")
+	}
+
+	if c.StripeWebhookSecret == "" {
+		return fmt.Errorf("STRIPE_WEBHOOK_SECRET is required")
+	}
+
 	return nil
 }
