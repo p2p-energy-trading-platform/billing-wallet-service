@@ -5,12 +5,15 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
 	"billing-wallet-service/internal/config"
+	"billing-wallet-service/internal/provider/stripe"
 	"billing-wallet-service/internal/service"
 	"billing-wallet-service/internal/store/postgres"
 	transportgrpc "billing-wallet-service/internal/transport/grpc"
@@ -19,19 +22,30 @@ import (
 )
 
 type App struct {
-	cfg          *config.Config
-	logger       *slog.Logger
-	dbPool       *pgxpool.Pool
-	redisClient  *redis.Client
-	grpcServer   *transportgrpc.Server
-	healthServer *http.Server
-	reconciler   *worker.Reconciler
-	stopWorkers  context.CancelFunc
-	workersDone  chan struct{}
+	cfg               *config.Config
+	logger            *slog.Logger
+	dbPool            *pgxpool.Pool
+	redisClient       *redis.Client
+	grpcServer        *transportgrpc.Server
+	healthServer      *http.Server
+	reconciler        *worker.Reconciler
+	depositReconciler *worker.DepositReconciler
+	stopWorkers       context.CancelFunc
+	workersDone       chan struct{}
 }
 
 func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisClient *redis.Client) *App {
-	walletUsecase := service.NewWalletUsecase(postgres.NewWalletRepo(dbPool))
+	stripego := stripe.NewClient(cfg.StripeSecretKey, cfg.StripeWebhookSecret, 5*time.Minute)
+	depositConfig := service.DepositConfig{
+		ChargeCurrency:   cfg.StripeCurrency,
+		CreditsPerUSD:    cfg.CreditsPerUSD,
+		MinDepositAmount: 1000,
+		MaxDepositAmount: 1000000000,
+		SessionTTL:       30 * time.Minute,
+		MinWithdrawal:    1000,
+	}
+
+	walletUsecase := service.NewWalletUsecase(postgres.NewWalletRepo(dbPool), postgres.NewDepositRepo(dbPool), postgres.NewWithdrawalRepo(dbPool), stripego, depositConfig, logger)
 	reservationRepo := postgres.NewReservationRepo(dbPool)
 	feeConfigRepo := postgres.NewFeeConfigRepo(dbPool)
 	feeConfigCache := service.NewFeeConfigCache(feeConfigRepo, service.DefaultFeeConfigCacheTTL)
@@ -56,14 +70,28 @@ func New(cfg *config.Config, logger *slog.Logger, dbPool *pgxpool.Pool, redisCli
 		Handler: mux,
 	}
 
+	reconciler := worker.NewReconciler(reservationRepo, cfg.HoldSweepInterval, worker.DefaultHoldBatchSize, logger)
+
+	// NOTE: other configs like stale after and batch size can be converted to env vars
+	// if needed
+	depositReconciler := worker.NewDepositReconciler(
+		postgres.NewDepositRepo(dbPool),
+		stripego,
+		cfg.DepositSweeperInterval,
+		worker.DefaultDepositStaleAfter,
+		worker.DefaultDepositBatchSize,
+		logger,
+	)
+
 	return &App{
-		cfg:          cfg,
-		logger:       logger,
-		dbPool:       dbPool,
-		redisClient:  redisClient,
-		grpcServer:   grpcServer,
-		healthServer: healthServer,
-		reconciler:   worker.NewReconciler(reservationRepo, cfg.HoldSweepInterval, worker.DefaultHoldBatchSize, logger),
+		cfg:               cfg,
+		logger:            logger,
+		dbPool:            dbPool,
+		redisClient:       redisClient,
+		grpcServer:        grpcServer,
+		healthServer:      healthServer,
+		reconciler:        reconciler,
+		depositReconciler: depositReconciler,
 	}
 }
 
@@ -97,8 +125,8 @@ func (a *App) Start(ctx context.Context) error {
 // startWorkers uses its own context, because the one passed to Start only covers
 // startup and times out while the service is still running.
 func (a *App) startWorkers() {
-	if !a.cfg.HoldSweeperEnabled {
-		a.logger.Info("Hold sweeper is disabled")
+	if !a.cfg.HoldSweeperEnabled && !a.cfg.DepositSweeperEnabled {
+		a.logger.Info("Background workers are disabled")
 		return
 	}
 
@@ -106,11 +134,38 @@ func (a *App) startWorkers() {
 	a.stopWorkers = cancel
 	a.workersDone = make(chan struct{})
 
+	var wg sync.WaitGroup
+
+	if a.cfg.HoldSweeperEnabled {
+
+		wg.Go(func() {
+			a.logger.Info("Starting hold sweeper", "interval", a.cfg.HoldSweepInterval.String())
+			a.reconciler.Run(ctx)
+		})
+
+	} else {
+		a.logger.Info("Hold sweep is disabled")
+	}
+
+	if a.cfg.DepositSweeperEnabled {
+
+		wg.Go(func() {
+			a.logger.Info(
+				"Starting deposit reconciler",
+				"interval", a.cfg.DepositSweeperInterval.String(),
+			)
+
+			a.depositReconciler.Run(ctx)
+		})
+	} else {
+		a.logger.Info("Deposit sweep is disabled")
+	}
+
 	go func() {
-		defer close(a.workersDone)
-		a.logger.Info("Starting hold sweeper", "interval", a.cfg.HoldSweepInterval.String())
-		a.reconciler.Run(ctx)
+		wg.Wait()
+		close(a.workersDone)
 	}()
+
 }
 
 func (a *App) Stop(ctx context.Context) {
