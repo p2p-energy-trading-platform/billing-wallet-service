@@ -168,7 +168,7 @@ func (c *Client) ParseWebhook(
 	}
 
 	if event.Data == nil {
-		return WebhookEvent{}, errors.New("Stripe webhook has no event data")
+		return WebhookEvent{}, errors.New("stripe webhook has no event data")
 	}
 
 	var checkoutSession struct {
